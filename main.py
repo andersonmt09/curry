@@ -91,6 +91,7 @@ SELLER_NAMES = {
 ADDITIONAL_ADMIN_IDS = [8268082701]
 ALLOWED_GROUP = int(os.getenv("CURRY_GROUP_ID", "0") or "0")
 GROUP_INVITE_URL = os.getenv("CURRY_GROUP_INVITE_URL", "https://t.me/Curry_comprobantebot")
+BOT_PUBLIC_USERNAME = "@Curry_comprobantebot"
 REQUIRED_CHANNEL_ID = ALLOWED_GROUP
 CHANNEL_INVITE_URL = GROUP_INVITE_URL
 
@@ -103,7 +104,7 @@ CONTACT_SELLERS = [
 
 BOT_ACCESS_TEXT = (
     "🔐 **Acceso VIP requerido**\n\n"
-    "Tu ID aun no tiene una membresia activa en el sistema.\n"
+    "Tu usuario aun no tiene una membresia activa en el sistema.\n"
     "El acceso se activa manualmente por un vendedor y queda con fecha de vencimiento.\n\n"
     "✨ **Que incluye el VIP:**\n"
     "• Generador de comprobantes\n"
@@ -467,13 +468,14 @@ async def send_vip_required_message(update):
         return
 
     user_id = update.effective_user.id
+    username = public_username_for(update.effective_user)
     await update.message.reply_text(
         "👋 **Bienvenido**\n\n"
         "Tu acceso todavía no está activo.\n\n"
         "━━━━━━━━━━━━━━\n"
-        f"🆔 **Tu ID:** `{user_id}`\n"
+        f"👤 **Usuario:** `{md_escape(username)}`\n"
         "💎 Estado: **Sin VIP activo**\n\n"
-        "Envíale tu ID a un vendedor para activar el acceso. También puedes ver planes, revisar reglas o pedir soporte desde los botones.",
+        "Contacta a un vendedor para activar el acceso. También puedes ver planes, revisar reglas o pedir soporte desde los botones.",
         parse_mode='Markdown',
         reply_markup=user_home_keyboard()
     )
@@ -542,9 +544,13 @@ async def send_main_menu(update):
         expires_text = format_vip_expiration(expires)
     else:
         expires_text = "Admin/Owner"
+    display_user = (
+        f"ID: `{user_id}`" if auth_system.is_admin(user_id)
+        else f"Usuario: `{md_escape(public_username_for(update.effective_user))}`"
+    )
     await update.message.reply_text(
         "💎 **Panel VIP activo**\n\n"
-        f"👤 Usuario: `{user_id}`\n"
+        f"👤 {display_user}\n"
         f"📅 Acceso hasta: **{expires_text}**\n\n"
         "Selecciona una opción del menú.\n"
         "Puedes usar **❌ Cancelar** en cualquier momento para cortar una acción.",
@@ -608,16 +614,18 @@ def is_seller(user_id: int) -> bool:
 def can_add_vip(user_id: int) -> bool:
     return auth_system.is_admin(user_id) or is_seller(user_id)
 
+def public_username_for(user) -> str:
+    user_id = int(user.id)
+    if user_id in OWNER_IDS or user_id in SELLER_IDS:
+        return BOT_PUBLIC_USERNAME
+    return f"@{user.username}" if getattr(user, "username", None) else "sin_username"
+
 def public_identity_for(user) -> tuple[str, str]:
     user_id = int(user.id)
-    if user_id == ADMIN_ID:
-        return "Curry", "@StephenCurry030"
-    if user_id in OWNER_IDS:
-        return "Curry", "oculto"
-    if user_id in SELLER_IDS:
-        return "Vendedor Curry", "oculto"
-    username = f"@{user.username}" if user.username else "sin_username"
-    return user.first_name or "Sin nombre", username
+    if user_id in OWNER_IDS or user_id in SELLER_IDS:
+        return "Curry", BOT_PUBLIC_USERNAME
+    username = public_username_for(user)
+    return username, username
 
 user_data_store = {}
 
@@ -908,7 +916,7 @@ def vip_status_text(target_user_id: int) -> str:
         f"🕐 Última actividad: {format_iso_time(last_activity)}"
     )
 
-def user_status_text(user_id: int) -> str:
+def user_status_text(user_id: int, user=None, show_id: bool = False) -> str:
     is_admin_user = auth_system.is_admin(user_id)
     is_owner_user = is_owner(user_id)
     is_vip = auth_system.is_authorized(user_id)
@@ -918,10 +926,16 @@ def user_status_text(user_id: int) -> str:
     status = "Owner" if is_owner_user else "Admin" if is_admin_user else "VIP activo" if is_vip else "Sin VIP"
     if is_banned:
         status = "Baneado"
+    if show_id or is_admin_user:
+        identity_line = f"🆔 ID: `{user_id}`"
+    elif user is not None:
+        identity_line = f"👤 Usuario: `{md_escape(public_username_for(user))}`"
+    else:
+        identity_line = f"👤 Usuario: `{BOT_PUBLIC_USERNAME}`"
     return (
         "✅ **Mi estado**\n\n"
         "━━━━━━━━━━━━━━\n"
-        f"🆔 ID: `{user_id}`\n"
+        f"{identity_line}\n"
         f"💎 Estado: **{status}**\n"
         f"📅 Acceso hasta: **{format_vip_expiration(expiration) if is_vip else 'No aplica'}**\n"
         f"🧾 Activado por: {md_escape(added.get('admin_name', 'Sin dato'))}\n\n"
@@ -3970,7 +3984,14 @@ async def miestado_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("ℹ️ Ese comando solo está disponible en privado.")
         return
     auth_system.update_activity(update.effective_user.id)
-    await update.message.reply_text(user_status_text(update.effective_user.id), parse_mode='Markdown')
+    await update.message.reply_text(
+        user_status_text(
+            update.effective_user.id,
+            user=update.effective_user,
+            show_id=auth_system.is_admin(update.effective_user.id)
+        ),
+        parse_mode='Markdown'
+    )
 
 async def adminhelp_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -4050,8 +4071,11 @@ async def verificar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         emoji = status_emoji.get(status, '❓')
         
         message = f"{emoji} **Estado de Verificación**\n\n"
-        message += f"🆔 Tu ID: `{user_id}`\n"
-        message += f"👥 Grupo ID: `{REQUIRED_GROUP_ID}`\n"
+        if auth_system.is_admin(user_id):
+            message += f"🆔 Tu ID: `{user_id}`\n"
+            message += f"👥 Grupo ID: `{REQUIRED_GROUP_ID}`\n"
+        else:
+            message += f"👤 Usuario: `{md_escape(public_username_for(update.effective_user))}`\n"
         message += f"📊 Estado: **{status.upper()}**\n\n"
         
         if status in ['member', 'administrator', 'creator', 'restricted']:
@@ -4462,7 +4486,14 @@ async def rules_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def status_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.message.reply_text(user_status_text(query.from_user.id), parse_mode='Markdown')
+    await query.message.reply_text(
+        user_status_text(
+            query.from_user.id,
+            user=query.from_user,
+            show_id=auth_system.is_admin(query.from_user.id)
+        ),
+        parse_mode='Markdown'
+    )
 
 async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -4491,7 +4522,7 @@ async def request_access_callback(update: Update, context: ContextTypes.DEFAULT_
         except Exception:
             pass
     await query.message.reply_text(
-        "✅ Solicitud enviada.\n\nUn vendedor revisará tu ID y te contactará para activar el acceso.",
+        "✅ Solicitud enviada.\n\nUn vendedor revisará tu usuario y te contactará para activar el acceso.",
         reply_markup=sellers_keyboard(include_prices=False)
     )
 
