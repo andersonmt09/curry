@@ -2609,6 +2609,10 @@ def admin_panel_keyboard():
             InlineKeyboardButton("🔎 Revisar ID", callback_data="admin_help_vipcheck"),
             InlineKeyboardButton("🆔 Mi ID", callback_data="admin_help_id"),
         ],
+        [
+            InlineKeyboardButton("👑 Agregar admin", callback_data="admin_help_admin"),
+            InlineKeyboardButton("🔻 Quitar admin", callback_data="admin_help_unadmin"),
+        ],
         [InlineKeyboardButton("⚙️ Ajustes", callback_data="owner_summary")],
     ])
 
@@ -4130,8 +4134,8 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     
-    if not auth_system.is_admin(user_id):
-        await update.message.reply_text(" Solo el administrador puede usar este comando.")
+    if not is_owner(user_id):
+        await update.message.reply_text("⛔ Solo un owner puede agregar administradores.")
         return
     
     # Verificar si es el grupo permitido o chat privado con admin
@@ -4145,6 +4149,9 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         target_user_id = int(context.args[0])
+        if target_user_id in SELLER_IDS:
+            await update.message.reply_text("⛔ Ese ID está configurado solo como vendedor. No se agregará como admin.")
+            return
         auth_system.add_admin(target_user_id, added_by=user_id, added_by_name=update.effective_user.first_name)
         await update.message.reply_text(f"👑 Usuario `{target_user_id}` agregado como administrador.", parse_mode='Markdown')
         logging.debug(f"[ADMIN] {user_id} agregó administrador {target_user_id} en chat {chat_id}")
@@ -4156,8 +4163,8 @@ async def unadmin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     
-    if not auth_system.is_admin(user_id):
-        await update.message.reply_text(" Solo el administrador puede usar este comando.")
+    if not is_owner(user_id):
+        await update.message.reply_text("⛔ Solo un owner puede quitar administradores.")
         return
     
     # Verificar si es el grupo permitido o chat privado con admin
@@ -4577,6 +4584,8 @@ def admin_bot_commands():
 def owner_bot_commands():
     return admin_bot_commands() + [
         BotCommand("owner", "Panel privado owner"),
+        BotCommand("admin", "Agregar admin"),
+        BotCommand("unadmin", "Quitar admin"),
     ]
 
 def seller_bot_commands():
