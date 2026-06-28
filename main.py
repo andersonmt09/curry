@@ -324,7 +324,13 @@ def seller_url(seller):
     username = seller.get("username")
     if username:
         return f"https://t.me/{username.replace('@', '')}"
-    return f"tg://user?id={seller['telegram_id']}"
+    return None
+
+def seller_button(seller):
+    url = seller_url(seller)
+    if url:
+        return InlineKeyboardButton(f"💬 {seller['name']}", url=url)
+    return InlineKeyboardButton(f"💬 {seller['name']}", callback_data="request_access")
 
 def sellers_keyboard(include_prices=True):
     keyboard = []
@@ -334,13 +340,13 @@ def sellers_keyboard(include_prices=True):
             InlineKeyboardButton("📲 App Nequi VIP", callback_data="prices_nequi_app"),
         ])
     for seller in CONTACT_SELLERS:
-        keyboard.append([InlineKeyboardButton(f"💬 {seller['name']}", url=seller_url(seller))])
+        keyboard.append([seller_button(seller)])
     keyboard.append([InlineKeyboardButton("📣 Canal oficial", url=GROUP_INVITE_URL)])
     return InlineKeyboardMarkup(keyboard)
 
 def user_home_keyboard():
     seller_buttons = [
-        InlineKeyboardButton(f"💬 {seller['name']}", url=seller_url(seller))
+        seller_button(seller)
         for seller in CONTACT_SELLERS
     ]
     keyboard = [
