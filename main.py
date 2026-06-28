@@ -82,11 +82,13 @@ OWNER_IDS = [
 OWNER_NAMES = {
     ADMIN_ID: "@StephenCurry030",
 }
-SUPERVISOR_ADMIN_IDS = [6801143985]
-SUPERVISOR_NAMES = {
+SUPERVISOR_ADMIN_IDS = []
+SUPERVISOR_NAMES = {}
+SELLER_IDS = [6801143985]
+SELLER_NAMES = {
     6801143985: "Vendedor Curry",
 }
-ADDITIONAL_ADMIN_IDS = [8268082701, 6801143985]
+ADDITIONAL_ADMIN_IDS = [8268082701]
 ALLOWED_GROUP = int(os.getenv("CURRY_GROUP_ID", "0") or "0")
 GROUP_INVITE_URL = os.getenv("CURRY_GROUP_INVITE_URL", "https://t.me/Curry_comprobantebot")
 REQUIRED_CHANNEL_ID = ALLOWED_GROUP
@@ -577,6 +579,13 @@ auth_system = AuthSystem(ADMIN_ID, ALLOWED_GROUP)
 for extra_admin_id in ADDITIONAL_ADMIN_IDS:
     if extra_admin_id != ADMIN_ID:
         auth_system.admin_users.add(extra_admin_id)
+removed_seller_admin = False
+for seller_id in SELLER_IDS:
+    if seller_id in auth_system.admin_users:
+        auth_system.admin_users.discard(seller_id)
+        removed_seller_admin = True
+if removed_seller_admin:
+    auth_system.save_data()
 
 def is_owner(user_id: int) -> bool:
     return int(user_id) in OWNER_IDS
@@ -592,6 +601,12 @@ def is_supervisor(user_id: int) -> bool:
 
 def can_view_supervisor_panel(user_id: int) -> bool:
     return is_owner(user_id) or is_supervisor(user_id)
+
+def is_seller(user_id: int) -> bool:
+    return int(user_id) in SELLER_IDS
+
+def can_add_vip(user_id: int) -> bool:
+    return auth_system.is_admin(user_id) or is_seller(user_id)
 
 user_data_store = {}
 
@@ -3369,15 +3384,15 @@ async def agregar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     
-    if not auth_system.is_admin(user_id):
-        await update.message.reply_text("❌ Comando disponible solo para administradores.")
+    if not can_add_vip(user_id):
+        await update.message.reply_text("❌ Comando disponible solo para administradores o vendedores autorizados.")
         return
     
     # Verificar si es el grupo permitido o chat privado con admin
     if not is_admin_control_chat(chat_id, user_id):
         await update.message.reply_text(
             "⛔ **Acceso Denegado**\n\n"
-            "Este comando solo puede ser usado por administradores autorizados",
+            "Este comando solo puede ser usado por administradores o vendedores autorizados",
             parse_mode='Markdown'
         )
         return
@@ -4564,6 +4579,11 @@ def owner_bot_commands():
         BotCommand("owner", "Panel privado owner"),
     ]
 
+def seller_bot_commands():
+    return public_bot_commands() + [
+        BotCommand("agregar", "Agregar VIP"),
+    ]
+
 async def refresh_group_command_menu(bot, group_id: int):
     """Show only the basic user commands in active groups to avoid admin clutter."""
     try:
@@ -4600,6 +4620,18 @@ async def setup_bot_commands(app):
         except Exception as e:
             logging.warning(
                 f"No se pudieron configurar comandos privados para {admin_id}: {e}. "
+                "Ese usuario debe abrir el bot con /start una vez."
+            )
+
+    for seller_id in SELLER_IDS:
+        try:
+            await app.bot.set_my_commands(
+                seller_bot_commands(),
+                scope=BotCommandScopeChat(chat_id=seller_id)
+            )
+        except Exception as e:
+            logging.warning(
+                f"No se pudieron configurar comandos privados para vendedor {seller_id}: {e}. "
                 "Ese usuario debe abrir el bot con /start una vez."
             )
 
