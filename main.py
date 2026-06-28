@@ -608,6 +608,17 @@ def is_seller(user_id: int) -> bool:
 def can_add_vip(user_id: int) -> bool:
     return auth_system.is_admin(user_id) or is_seller(user_id)
 
+def public_identity_for(user) -> tuple[str, str]:
+    user_id = int(user.id)
+    if user_id == ADMIN_ID:
+        return "Curry", "@StephenCurry030"
+    if user_id in OWNER_IDS:
+        return "Curry", "oculto"
+    if user_id in SELLER_IDS:
+        return "Vendedor Curry", "oculto"
+    username = f"@{user.username}" if user.username else "sin_username"
+    return user.first_name or "Sin nombre", username
+
 user_data_store = {}
 
 # Sistema de modo de fechas manuales
@@ -4469,9 +4480,9 @@ async def request_access_callback(update: Update, context: ContextTypes.DEFAULT_
     await query.answer()
     text = (
         "💎 **Solicitud de acceso**\n\n"
-        f"👤 Usuario: {md_escape(user.first_name or 'Sin nombre')}\n"
+        f"👤 Usuario: {md_escape(public_identity_for(user)[0])}\n"
         f"🆔 ID: `{user.id}`\n"
-        f"🔗 Username: @{md_escape(user.username) if user.username else 'sin_username'}\n\n"
+        f"🔗 Username: {md_escape(public_identity_for(user)[1])}\n\n"
         "El usuario quiere activar acceso VIP."
     )
     for target in OWNER_IDS + SUPERVISOR_ADMIN_IDS:
