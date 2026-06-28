@@ -147,6 +147,8 @@ def group_comandos_disponibles_text(can_manage_group: bool = False):
         "📋 **Comandos del grupo**\n\n"
         "━━━━━━━━━━━━━━\n"
         "🤖 `/comprobante` - Abrir panel\n"
+        "📅 `/fechas` - Activar/desactivar fecha manual\n"
+        "🔢 `/refes` - Activar/desactivar referencia manual\n"
         "✅ `/on` - Prender el bot\n"
         "⛔ `/off` - Apagar el bot\n"
         "🆓 `/gratis` - Activar gratis este grupo\n"
@@ -160,6 +162,8 @@ def comandos_disponibles_text(user_id=None):
         "━━━━━━━━━━━━━━\n"
         "🤖 `/start` - Iniciar\n"
         "🧾 `/comprobante` - Abrir generador\n"
+        "📅 `/fechas` - Activar/desactivar fecha manual\n"
+        "🔢 `/refes` - Activar/desactivar referencia manual\n"
         "📌 `/reglas` - Ver reglas\n"
         "💬 `/soporte` - Contactar soporte\n"
         "❌ `/cancelar` - Cancelar una acción pendiente"
@@ -447,7 +451,6 @@ def main_menu_keyboard(group_mode: bool = False):
         [KeyboardButton("🏦 Ahorros"), KeyboardButton("💼 Corriente")],
         [KeyboardButton("↔️ BC a NQ"), KeyboardButton("🔲 BC QR")],
         [KeyboardButton("🏛️ Nequi Corriente"), KeyboardButton("💰 Nequi Ahorros")],
-        [KeyboardButton("📅 Fecha manual"), KeyboardButton("🔢 Referencia manual")],
     ]
     if group_mode:
         keyboard = base_keyboard + [
@@ -4555,7 +4558,7 @@ async def fechas_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "📅 **Fecha manual activada**\n\n"
             "📝 Ingresa la fecha cuando el bot la solicite.\n\n"
             "Ejemplo: `06 de diciembre de 2025 a las 02:30 p. m.`\n\n"
-            "Toca **📅 Fecha manual** otra vez o usa /fechas para volver a automático.",
+            "Usa /fechas otra vez para volver a automático.",
             parse_mode='Markdown'
         )
 
@@ -4588,7 +4591,7 @@ async def refes_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🔢 **Referencia manual activada**\n\n"
             "🔢 Ingresa la referencia cuando el bot la solicite.\n\n"
             "Ejemplo: `M12345678`\n\n"
-            "Toca **🔢 Referencia manual** otra vez o usa /refes para volver a automático.",
+            "Usa /refes otra vez para volver a automático.",
             parse_mode='Markdown'
         )
 
@@ -4596,6 +4599,8 @@ def public_bot_commands():
     return [
         BotCommand("start", "Iniciar"),
         BotCommand("comprobante", "Abrir generador"),
+        BotCommand("fechas", "Fecha manual"),
+        BotCommand("refes", "Referencia manual"),
         BotCommand("comandos", "Ver comandos"),
         BotCommand("reglas", "Reglas de uso"),
         BotCommand("miestado", "Ver mi estado"),
@@ -4606,6 +4611,8 @@ def public_bot_commands():
 def group_bot_commands():
     return [
         BotCommand("comprobante", "Abrir generador"),
+        BotCommand("fechas", "Fecha manual"),
+        BotCommand("refes", "Referencia manual"),
         BotCommand("on", "Prender grupo"),
         BotCommand("off", "Apagar grupo"),
         BotCommand("gratis", "Activar gratis"),
