@@ -30,6 +30,7 @@ import logging
 from datetime import datetime, timedelta
 import pytz
 import json
+import re
 
 os.makedirs("logs", exist_ok=True)
 
@@ -73,20 +74,19 @@ load_env_file()
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 if not BOT_TOKEN:
     raise RuntimeError("Falta configurar BOT_TOKEN en las variables de entorno.")
-ADMIN_ID = 6801143985  # Owner principal Curry
+ADMIN_ID = 7422843477  # Owner principal Curry (@StephenCurry030)
 OWNER_IDS = [
     ADMIN_ID,
-    7422843477,
     8268082701,
 ]
 OWNER_NAMES = {
-    ADMIN_ID: "Owner principal",
-    7422843477: "Owner",
-    8268082701: "Owner",
+    ADMIN_ID: "@StephenCurry030",
 }
-SUPERVISOR_ADMIN_IDS = []
-SUPERVISOR_NAMES = {}
-ADDITIONAL_ADMIN_IDS = [7422843477, 8268082701]
+SUPERVISOR_ADMIN_IDS = [6801143985]
+SUPERVISOR_NAMES = {
+    6801143985: "Vendedor Curry",
+}
+ADDITIONAL_ADMIN_IDS = [8268082701, 6801143985]
 ALLOWED_GROUP = int(os.getenv("CURRY_GROUP_ID", "0") or "0")
 GROUP_INVITE_URL = os.getenv("CURRY_GROUP_INVITE_URL", "https://t.me/Curry_comprobantebot")
 REQUIRED_CHANNEL_ID = ALLOWED_GROUP
@@ -96,9 +96,7 @@ CHANNEL_INVITE_URL = GROUP_INVITE_URL
 # Si el vendedor tiene username, ponlo sin @ en "username".
 # Si no tiene username, deja username en None y cambia telegram_id.
 CONTACT_SELLERS = [
-    {"name": "Soporte Curry 1", "telegram_id": 6801143985, "username": None},
-    {"name": "Soporte Curry 2", "telegram_id": 7422843477, "username": None},
-    {"name": "Soporte Curry 3", "telegram_id": 8268082701, "username": None},
+    {"name": "Vendedor Curry", "telegram_id": 6801143985, "username": None},
 ]
 
 BOT_ACCESS_TEXT = (
@@ -146,6 +144,9 @@ def group_comandos_disponibles_text(can_manage_group: bool = False):
         "📋 **Comandos del grupo**\n\n"
         "━━━━━━━━━━━━━━\n"
         "🤖 `/comprobante` - Abrir panel\n"
+        "✅ `/on` - Prender el bot\n"
+        "⛔ `/off` - Apagar el bot\n"
+        "🆓 `/gratis` - Activar gratis este grupo\n"
         "📌 `/reglas` - Ver reglas\n"
         "❌ `/cancelar` - Cancelar acción"
     )
@@ -720,24 +721,51 @@ def is_group_chat(update: Update) -> bool:
     return bool(update.effective_chat and update.effective_chat.type in {"group", "supergroup"})
 
 def parse_group_time(value: str) -> str | None:
-    clean = value.strip().replace(".", ":")
-    if ":" not in clean:
+    clean = value.strip().lower().replace(".", ":")
+    clean = re.sub(r"\s+", " ", clean)
+    match = re.fullmatch(r"(\d{1,2})(?::(\d{1,2}))?\s*(am|pm)?", clean)
+    if not match:
         return None
-    hour_text, minute_text = clean.split(":", 1)
-    if not hour_text.isdigit() or not minute_text.isdigit():
+    hour = int(match.group(1))
+    minute = int(match.group(2) or "0")
+    suffix = match.group(3)
+    if suffix:
+        if hour < 1 or hour > 12:
+            return None
+        if suffix == "am":
+            hour = 0 if hour == 12 else hour
+        else:
+            hour = 12 if hour == 12 else hour + 12
+    elif ":" not in clean:
         return None
-    hour = int(hour_text)
-    minute = int(minute_text)
     if hour < 0 or hour > 23 or minute < 0 or minute > 59:
         return None
     return f"{hour:02d}:{minute:02d}"
+
+def parse_group_schedule_parts(parts: list[str]) -> tuple[str | None, str | None]:
+    if len(parts) >= 4 and parts[1].lower().replace(".", "") in {"am", "pm"}:
+        return parse_group_time(f"{parts[0]} {parts[1]}"), parse_group_time(f"{parts[2]} {parts[3]}")
+    if len(parts) >= 2:
+        return parse_group_time(parts[0]), parse_group_time(parts[1])
+    return None, None
+
+def format_group_time_12h(value: str) -> str:
+    try:
+        hour, minute = [int(part) for part in value.split(":", 1)]
+        suffix = "AM" if hour < 12 else "PM"
+        hour_12 = hour % 12 or 12
+        return f"{hour_12}:{minute:02d} {suffix}"
+    except Exception:
+        return value
 
 def group_schedule_text(chat_id: int) -> str:
     schedule = auth_system.get_group_schedule(chat_id)
     if not schedule or not schedule.get("enabled"):
         return "Sin horario: funciona todo el día"
     state = "abierto" if auth_system.is_group_schedule_open(chat_id) else "cerrado"
-    return f"{schedule.get('start')} a {schedule.get('end')} ({schedule.get('timezone', 'America/Bogota')}) - ahora {state}"
+    start = format_group_time_12h(schedule.get("start", ""))
+    end = format_group_time_12h(schedule.get("end", ""))
+    return f"{start} a {end} ({schedule.get('timezone', 'America/Bogota')}) - ahora {state}"
 
 async def send_group_unavailable_message(update: Update):
     chat_id = update.effective_chat.id
@@ -752,7 +780,7 @@ async def send_group_unavailable_message(update: Update):
     await update.message.reply_text(
         "⏰ Bot fuera de horario en este grupo.\n\n"
         f"Horario actual: **{md_escape(group_schedule_text(chat_id))}**\n\n"
-        "Un admin del bot puede cambiarlo desde privado con `/horario ID_DEL_GRUPO 08:00 18:00`.",
+        "Un admin del bot puede cambiarlo desde privado con `/horario ID_DEL_GRUPO 8:00 AM 6:00 PM`.",
         parse_mode='Markdown'
     )
 
@@ -763,7 +791,7 @@ def is_activation_command(text: str | None) -> bool:
     if not text:
         return False
     command = text.strip().split()[0].split("@")[0].lower()
-    return command in {"/activargrupo", "/cashon"}
+    return command in {"/activargrupo", "/cashon", "/on", "/gratis"}
 
 async def inactive_group_guard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not is_group_disabled(update):
@@ -1319,7 +1347,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             data["group_id"] = group_id
             data["step"] = 1
             await update.message.reply_text(
-                "⏰ Envía el horario en formato `08:00 18:00`.\n\n"
+                "⏰ Envía el horario en formato `8:00 AM 6:00 PM`.\n"
+                "También acepto `08:00 18:00`.\n\n"
                 "También puedes escribir `off` para quitar el horario.",
                 parse_mode='Markdown'
             )
@@ -1334,12 +1363,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             parts = text.split()
             if len(parts) < 2:
-                await update.message.reply_text("❌ Envía el horario así: `08:00 18:00`", parse_mode='Markdown')
+                await update.message.reply_text("❌ Envía el horario así: `8:00 AM 6:00 PM`", parse_mode='Markdown')
                 return
-            start_time = parse_group_time(parts[0])
-            end_time = parse_group_time(parts[1])
+            start_time, end_time = parse_group_schedule_parts(parts)
             if not start_time or not end_time:
-                await update.message.reply_text("❌ Horario inválido. Usa formato de 24 horas: `08:00 18:00`", parse_mode='Markdown')
+                await update.message.reply_text("❌ Horario inválido. Usa por ejemplo: `8:00 AM 6:00 PM`", parse_mode='Markdown')
                 return
             auth_system.set_group_schedule(
                 group_id,
@@ -1349,7 +1377,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 updated_by_name=data.get("admin_name") or update.effective_user.first_name or "Admin"
             )
             await update.message.reply_text(
-                f"✅ Horario actualizado: **{start_time}** a **{end_time}**.",
+                f"✅ Horario actualizado: **{format_group_time_12h(start_time)}** a **{format_group_time_12h(end_time)}**.",
                 parse_mode='Markdown',
                 reply_markup=group_panel_keyboard(update.effective_chat.id, update.effective_chat.type)
             )
@@ -2755,7 +2783,7 @@ def active_groups_text() -> str:
         "• `/grupos` - abrir este panel",
         "• `/activargrupo ID_DEL_GRUPO` - activar por ID",
         "• `/desactivargrupo ID_DEL_GRUPO` - desactivar por ID",
-        "• `/horario ID_DEL_GRUPO 08:00 18:00` - poner horario",
+        "• `/horario ID_DEL_GRUPO 8:00 AM 6:00 PM` - poner horario",
         "• `/horario ID_DEL_GRUPO off` - quitar horario"
     ])
     return "\n".join(lines)
@@ -2812,11 +2840,21 @@ async def grupos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def activargrupo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    if is_group_chat(update):
-        await update.message.reply_text("🔒 Este control se maneja por privado. Abre el bot y usa `/grupos`.")
-        return
     if not auth_system.is_admin(user_id):
         await update.message.reply_text("⛔ Comando disponible solo para administradores del bot.")
+        return
+
+    if is_group_chat(update):
+        chat = update.effective_chat
+        created = auth_system.activate_group(
+            chat.id,
+            chat.title or f"Grupo {chat.id}",
+            activated_by=user_id,
+            activated_by_name=update.effective_user.first_name or "Admin"
+        )
+        await refresh_group_command_menu(context.bot, chat.id)
+        await update.message.reply_text("✅ Grupo activado." if created else "✅ Grupo actualizado.")
+        await notify_main_admin(context, user_id, update.effective_user.first_name, "Activó grupo", str(chat.id))
         return
 
     invite_link = extract_group_link_from_args(context.args)
@@ -2863,11 +2901,18 @@ async def activargrupo_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def desactivargrupo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    if is_group_chat(update):
-        await update.message.reply_text("🔒 Este control se maneja por privado. Abre el bot y usa `/grupos`.")
-        return
     if not auth_system.is_admin(user_id):
         await update.message.reply_text("⛔ Comando disponible solo para administradores del bot.")
+        return
+
+    if is_group_chat(update):
+        group_id = update.effective_chat.id
+        if auth_system.deactivate_group(group_id, deactivated_by=user_id, deactivated_by_name=update.effective_user.first_name):
+            await reset_group_command_menu(context.bot, group_id)
+            await update.message.reply_text("⛔ Grupo desactivado.")
+            await notify_main_admin(context, user_id, update.effective_user.first_name, "Desactivó grupo", str(group_id))
+        else:
+            await update.message.reply_text("ℹ️ El grupo ya estaba desactivado.")
         return
 
     if context.args:
@@ -2904,6 +2949,7 @@ async def cashhorario_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text(
             "⏰ **Horario por ID**\n\n"
             "Usa:\n"
+            "`/horario ID_DEL_GRUPO 8:00 AM 6:00 PM`\n"
             "`/horario ID_DEL_GRUPO 08:00 18:00`\n"
             "`/horario ID_DEL_GRUPO off`",
             parse_mode='Markdown'
@@ -2932,16 +2978,15 @@ async def cashhorario_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if len(context.args) < 3:
         await update.message.reply_text(
-            "❌ Uso: `/horario ID_DEL_GRUPO 08:00 18:00` o `/horario ID_DEL_GRUPO off`",
+            "❌ Uso: `/horario ID_DEL_GRUPO 8:00 AM 6:00 PM` o `/horario ID_DEL_GRUPO off`",
             parse_mode='Markdown'
         )
         return
 
-    start_time = parse_group_time(context.args[1])
-    end_time = parse_group_time(context.args[2])
+    start_time, end_time = parse_group_schedule_parts(context.args[1:])
     if not start_time or not end_time:
         await update.message.reply_text(
-            "❌ Horario inválido. Usa formato de 24 horas, por ejemplo: `/horario ID_DEL_GRUPO 08:00 18:00`",
+            "❌ Horario inválido. Usa por ejemplo: `/horario ID_DEL_GRUPO 8:00 AM 6:00 PM`",
             parse_mode='Markdown'
         )
         return
@@ -2954,7 +2999,7 @@ async def cashhorario_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         updated_by_name=update.effective_user.first_name or "Admin"
     )
     await update.message.reply_text(
-        f"✅ Horario actualizado: **{start_time}** a **{end_time}**.",
+        f"✅ Horario actualizado: **{format_group_time_12h(start_time)}** a **{format_group_time_12h(end_time)}**.",
         parse_mode='Markdown'
     )
 
@@ -4497,6 +4542,9 @@ def public_bot_commands():
 def group_bot_commands():
     return [
         BotCommand("comprobante", "Abrir generador"),
+        BotCommand("on", "Prender grupo"),
+        BotCommand("off", "Apagar grupo"),
+        BotCommand("gratis", "Activar gratis"),
         BotCommand("reglas", "Reglas de uso"),
         BotCommand("cancelar", "Cancelar acción"),
     ]
@@ -4632,8 +4680,11 @@ def main():
     app.add_handler(CommandHandler("stats", stats_command))
     app.add_handler(CommandHandler("usuarios", usuarios_command))
     app.add_handler(CommandHandler("grupos", grupos_command))
+    app.add_handler(CommandHandler("on", activargrupo_command))
+    app.add_handler(CommandHandler("gratis", activargrupo_command))
     app.add_handler(CommandHandler("activargrupo", activargrupo_command))
     app.add_handler(CommandHandler("cashon", activargrupo_command))
+    app.add_handler(CommandHandler("off", desactivargrupo_command))
     app.add_handler(CommandHandler("desactivargrupo", desactivargrupo_command))
     app.add_handler(CommandHandler("cashoff", desactivargrupo_command))
     app.add_handler(CommandHandler("cashhorario", cashhorario_command))
