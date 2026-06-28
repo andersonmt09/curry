@@ -1,0 +1,9 @@
+﻿.env
+logs/
+backups/
+__pycache__/
+*.pyc
+bot_settings.json
+prices_data.json
+auth_data.json
+referencias.json
