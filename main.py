@@ -4688,6 +4688,26 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_error_handler(error_handler)
 
+    public_webhook_url = os.getenv("WEBHOOK_URL", "").strip()
+    railway_public_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN", "").strip()
+    if not public_webhook_url and railway_public_domain:
+        public_webhook_url = f"https://{railway_public_domain}"
+
+    if public_webhook_url:
+        webhook_path = os.getenv("WEBHOOK_PATH", "telegram-webhook").strip("/")
+        webhook_url = f"{public_webhook_url.rstrip('/')}/{webhook_path}"
+        logging.info("Iniciando Curry por webhook en Railway.")
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=int(os.getenv("PORT", "8080")),
+            url_path=webhook_path,
+            webhook_url=webhook_url,
+            secret_token=os.getenv("WEBHOOK_SECRET") or None,
+            drop_pending_updates=True,
+        )
+        return
+
+    logging.info("Iniciando Curry por polling.")
     app.run_polling(
         bootstrap_retries=-1,
         drop_pending_updates=True,
