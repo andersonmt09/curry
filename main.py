@@ -80,9 +80,9 @@ OWNER_IDS = [
     8268082701,
 ]
 OWNER_NAMES = {
-    ADMIN_ID: "Curry Owner 1",
-    7422843477: "Curry Owner 2",
-    8268082701: "Curry Owner 3",
+    ADMIN_ID: "Owner principal",
+    7422843477: "Owner",
+    8268082701: "Owner",
 }
 SUPERVISOR_ADMIN_IDS = []
 SUPERVISOR_NAMES = {}
@@ -96,9 +96,9 @@ CHANNEL_INVITE_URL = GROUP_INVITE_URL
 # Si el vendedor tiene username, ponlo sin @ en "username".
 # Si no tiene username, deja username en None y cambia telegram_id.
 CONTACT_SELLERS = [
-    {"name": "Curry Owner 1", "telegram_id": 6801143985, "username": None},
-    {"name": "Curry Owner 2", "telegram_id": 7422843477, "username": None},
-    {"name": "Curry Owner 3", "telegram_id": 8268082701, "username": None},
+    {"name": "Soporte Curry 1", "telegram_id": 6801143985, "username": None},
+    {"name": "Soporte Curry 2", "telegram_id": 7422843477, "username": None},
+    {"name": "Soporte Curry 3", "telegram_id": 8268082701, "username": None},
 ]
 
 BOT_ACCESS_TEXT = (
@@ -156,9 +156,7 @@ def comandos_disponibles_text(user_id=None):
         "━━━━━━━━━━━━━━\n"
         "🤖 `/start` - Iniciar\n"
         "🧾 `/comprobante` - Abrir generador\n"
-        "📋 `/comandos` - Ver comandos\n"
         "📌 `/reglas` - Ver reglas\n"
-        "✅ `/miestado` - Ver tu acceso\n"
         "💬 `/soporte` - Contactar soporte\n"
         "❌ `/cancelar` - Cancelar una acción pendiente"
     )
@@ -167,11 +165,9 @@ def comandos_disponibles_text(user_id=None):
         text += (
             "\n\n🛠️ **Comandos admin**\n"
             "🛠️ `/panel` - Panel administrador\n"
-            "👥 `/grupos` - Panel de grupos\n"
+            "👥 `/grupos` - Grupos por ID\n"
             "💎 `/agregar` - Agregar VIP\n"
-            "🔁 `/renovar ID tiempo` - Renovar VIP\n"
-            "🔎 `/vipcheck ID` - Revisar estado\n"
-            "📋 `/usuarios vip` - Listar usuarios"
+            "📊 `/stats` - Ver estadísticas"
         )
 
     if user_id is not None and is_owner(user_id):
@@ -444,6 +440,9 @@ def main_menu_keyboard(group_mode: bool = False):
     base_keyboard = [
         [KeyboardButton("🟣 Nequi"), KeyboardButton("🔴 Daviplata")],
         [KeyboardButton("🔳 Nequi QR"), KeyboardButton("⚡ Bre B"), KeyboardButton("🚫 Anulado")],
+        [KeyboardButton("🏦 Ahorros"), KeyboardButton("💼 Corriente")],
+        [KeyboardButton("↔️ BC a NQ"), KeyboardButton("🔲 BC QR")],
+        [KeyboardButton("🏛️ Nequi Corriente"), KeyboardButton("💰 Nequi Ahorros")],
         [KeyboardButton("📅 Fecha manual"), KeyboardButton("🔢 Referencia manual")],
     ]
     if group_mode:
@@ -454,7 +453,7 @@ def main_menu_keyboard(group_mode: bool = False):
     else:
         keyboard = base_keyboard + [
             [KeyboardButton("📋 Comandos"), KeyboardButton("✅ Mi estado")],
-            [KeyboardButton("💬 Soporte"), KeyboardButton("📌 Reglas")],
+            [KeyboardButton("💰 Precios"), KeyboardButton("📌 Reglas")],
             [KeyboardButton("❌ Cancelar")]
         ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
@@ -2553,41 +2552,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ================= ADMIN COMMANDS =================
 def admin_panel_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("👥 PANEL GRUPOS / AGREGAR BOT", callback_data="admin_groups_panel")],
-        [InlineKeyboardButton("💎 Usuarios VIP", callback_data="admin_help_agregar")],
+        [InlineKeyboardButton("🧾 Comprobantes", callback_data="admin_help_comprobante")],
+        [InlineKeyboardButton("👥 Grupos por ID", callback_data="admin_groups_panel")],
         [
-            InlineKeyboardButton("➕ Agregar", callback_data="admin_help_agregar"),
+            InlineKeyboardButton("➕ Agregar persona", callback_data="admin_help_agregar"),
             InlineKeyboardButton("🔁 Renovar", callback_data="admin_help_renovar"),
         ],
         [
-            InlineKeyboardButton("➖ Quitar", callback_data="admin_help_eliminar"),
-            InlineKeyboardButton("🔎 Revisar", callback_data="admin_help_vipcheck"),
-        ],
-        [
-            InlineKeyboardButton("🚫 Banear", callback_data="admin_help_ban"),
-            InlineKeyboardButton("✅ Desbanear", callback_data="admin_help_unban"),
-        ],
-        [
-            InlineKeyboardButton("👑 Dar admin", callback_data="admin_help_admin"),
-            InlineKeyboardButton("🔻 Quitar admin", callback_data="admin_help_unadmin"),
-        ],
-        [
             InlineKeyboardButton("📊 Estadísticas", callback_data="admin_help_stats"),
-            InlineKeyboardButton("🆔 Ver mi ID", callback_data="admin_help_id"),
+            InlineKeyboardButton("📋 Usuarios", callback_data="admin_help_usuarios"),
         ],
         [
-            InlineKeyboardButton("📋 Listas", callback_data="admin_help_usuarios"),
-            InlineKeyboardButton("💰 Precios", callback_data="admin_help_setprecio"),
+            InlineKeyboardButton("🔎 Revisar ID", callback_data="admin_help_vipcheck"),
+            InlineKeyboardButton("🆔 Mi ID", callback_data="admin_help_id"),
         ],
-        [InlineKeyboardButton("🛠️ Mantenimiento", callback_data="admin_help_mantenimiento")],
+        [InlineKeyboardButton("⚙️ Ajustes", callback_data="owner_summary")],
     ])
 
 def group_panel_keyboard(chat_id: int | None = None, chat_type: str | None = None):
     buttons = [
         [InlineKeyboardButton("🤖 Agregar bot a un grupo", callback_data="admin_groups_invite")],
         [
-            InlineKeyboardButton("✅ Activar por ID", callback_data="admin_groups_add_id"),
-            InlineKeyboardButton("⛔ Desactivar por ID", callback_data="admin_groups_remove_id"),
+            InlineKeyboardButton("✅ ON gratis por ID", callback_data="admin_groups_add_id"),
+            InlineKeyboardButton("⛔ OFF por ID", callback_data="admin_groups_remove_id"),
         ],
         [
             InlineKeyboardButton("⏰ Poner horario", callback_data="admin_groups_schedule_id"),
@@ -2790,21 +2777,21 @@ async def send_bot_invite_info(message, context: ContextTypes.DEFAULT_TYPE):
     if username:
         invite_url = f"https://t.me/{username}?startgroup=true"
         text = (
-            "🤖 **Agregar bot a un grupo**\n\n"
+            "🤖 Agregar bot a un grupo\n\n"
             f"1. Abre este enlace: {invite_url}\n"
             "2. Selecciona el grupo de Telegram.\n"
             "3. Vuelve a este chat privado.\n"
-            "4. Entra a **Activar por ID** y envía el ID exacto del grupo.\n\n"
+            "4. Entra a Activar por ID y envía el ID exacto del grupo.\n\n"
             "Así nadie puede prender o apagar el bot desde el grupo."
         )
     else:
         text = (
-            "🤖 **Agregar bot a un grupo**\n\n"
+            "🤖 Agregar bot a un grupo\n\n"
             "No pude leer el username del bot ahora mismo.\n"
             "Agrégalo manualmente al grupo desde Telegram y luego vuelve a este panel para activarlo por ID."
         )
 
-    await message.reply_text(text, parse_mode='Markdown')
+    await message.reply_text(text, disable_web_page_preview=True)
 
 async def grupos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -3120,6 +3107,7 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     help_messages = {
+        "admin_help_comprobante": "🧾 **Comprobantes**\n\nUsa `/comprobante` para abrir el panel completo del generador.",
         "admin_help_eliminar": "➖ **Quitar VIP**\n\nUsa:\n`/eliminar ID_DEL_USUARIO`",
         "admin_help_renovar": "🔁 **Renovar VIP**\n\nUsa:\n`/renovar ID_DEL_USUARIO 1 hora`\n`/renovar ID_DEL_USUARIO 1 mes`\n\nTambién puedes escribir solo `/renovar` y seguir los pasos.",
         "admin_help_vipcheck": "🔎 **Revisar usuario**\n\nUsa:\n`/vipcheck ID_DEL_USUARIO`",
@@ -4692,6 +4680,8 @@ def main():
     railway_public_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN", "").strip()
     if not public_webhook_url and railway_public_domain:
         public_webhook_url = f"https://{railway_public_domain}"
+    if not public_webhook_url:
+        public_webhook_url = "https://curry-production-41e1.up.railway.app"
 
     if public_webhook_url:
         webhook_path = os.getenv("WEBHOOK_PATH", "telegram-webhook").strip("/")
