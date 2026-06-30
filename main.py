@@ -1,6 +1,6 @@
 ﻿from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler, ApplicationHandlerStop
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, BotCommandScopeChat
-from telegram.error import Conflict
+from telegram.error import Conflict, NetworkError, TimedOut
 from config import (
     COMPROBANTE1_CONFIG,
     COMPROBANTE4_CONFIG,
@@ -4722,6 +4722,9 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(context.error, Conflict):
         logging.warning("Conflicto de getUpdates: hay otra instancia del bot corriendo con el mismo token.")
         return
+    if isinstance(context.error, (TimedOut, NetworkError)):
+        logging.warning("Error temporal de red con Telegram: %s", context.error)
+        return
 
     logging.error("Error no controlado", exc_info=context.error)
     try:
@@ -4737,7 +4740,16 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
         pass
 
 def main():
-    app = Application.builder().token(BOT_TOKEN).post_init(setup_bot_commands).build()
+    app = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .connect_timeout(30)
+        .read_timeout(30)
+        .write_timeout(60)
+        .pool_timeout(30)
+        .post_init(setup_bot_commands)
+        .build()
+    )
 
     app.add_handler(MessageHandler(filters.ALL, unsupported_update_guard), group=-2)
     app.add_handler(MessageHandler(filters.ChatType.GROUPS & filters.COMMAND, inactive_group_guard), group=-1)
